@@ -32,6 +32,7 @@ No, it's not. All of the device functions has been implemented, but it needs ext
 encuraged to try and play with it (and provide feedback) but don't expect a production-stable quality.
 The CLI demo is ready and useful for reading/setting parameters for mcp2200 inside GPIO.
 In LINUX environment it is necessary to install this libraries: libusb-1.0-0-dev , libudev-dev.
+mcp2200hid Successfully tested in LINUX environment (UBUNTU).
 
 License
 =======
