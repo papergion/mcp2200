@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 
-#define MCP2200_MAX_DEVICE_NUM 10
+#define MCP2200_MAX_DEVICE_NUM 4
 #define MCP2200_USE_CONFIGURATION 0
 
 #define MCP2200_HID_INTERFACE 2
@@ -30,11 +30,12 @@
 #define MCP2200_CDC_BUFFERSIZE_IN 	64u
 #define MCP2200_CDC_ENDPOINT_OUT 	0x03
 #define MCP2200_CDC_BUFFERSIZE_OUT 	32u
-
 #define MCP2200_CDC_TRANSFER_TIMEOUT 1
+
 
 static libusb_device* device_list[MCP2200_MAX_DEVICE_NUM];
 static int device_list_count = -1;
+static int class_connected = 0;
 static libusb_device_handle* connection_list[MCP2200_MAX_DEVICE_NUM];
 
 static void closeDevice(int connectionID){
@@ -80,7 +81,12 @@ int mcp2200_hid_read_io(int connectionID, uint8_t *data){
 	if (rbuffer[0] != MCP2200_HID_COMMAND_READ_ALL) return MCP2200_INVALID_RESPONSE;
 	if (t < MCP2200_HID_REPORT_SIZE) return MCP2200_IO_ERROR;
 
-	*data = rbuffer[10];
+	t = 0;
+	while (t < MCP2200_HID_REPORT_SIZE)
+	{
+		*data = rbuffer[t++];
+		data++;
+	}
 	return 0;
 }
 
@@ -155,6 +161,17 @@ int mcp2200_hid_configure(int connectionID,
 		uint8_t config_alt_pins,
 		uint8_t IO_default_pins,
 		uint8_t config_alt_options,
+		uint8_t baudH,
+		uint8_t baudL
+		){
+	return mcp2200_hid_configure(connectionID, IO_bmap, config_alt_pins, IO_default_pins, config_alt_options, (uint16_t) (baudH<<8)|baudL);
+}
+
+int mcp2200_hid_configure(int connectionID,
+		uint8_t IO_bmap,
+		uint8_t config_alt_pins,
+		uint8_t IO_default_pins,
+		uint8_t config_alt_options,
 		uint16_t baudRate
 		){
 
@@ -221,7 +238,7 @@ int mcp2200_receive(int connectionID, uint8_t *data, int length, int* received){
 	int remain = length;
 	int t = 1;
 	int r = 0;
-	int l = 0;
+	unsigned int l = 0;
 
 	while((remain > 0) && (t > 0)){
 		t = 0;
@@ -262,7 +279,7 @@ int mcp2200_send(int connectionID, uint8_t *data, int length){
 	int r = 0;
 	int index = 0;
 	int remain = length;
-	int l = 0;
+	unsigned int l = 0;
 
 	while(remain > 0){
 		t = 0;
@@ -333,6 +350,7 @@ int mcp2200_list_devices(int vendorID, int productID){
 					productID == desc.idProduct &&
 					device_list_count < MCP2200_MAX_DEVICE_NUM){
 				ok = 1;
+				fprintf(stderr, "\nfound vid:%04x  pid:%04x  man:%04X  prod:%04X\n",vendorID,productID,desc.iManufacturer,desc.iProduct);
 			}
 		}
 
@@ -365,29 +383,44 @@ static int findEmptyConnectionSlot(){
 }
 
 int mcp2200_connect(int index){
+	return mcp2200_connect(index,MCP2200_ALL_CLASS);
+}
+
+int mcp2200_connect(int index,int usbclass){
 	if (index < device_list_count){
 		int conID = findEmptyConnectionSlot();
 		if (conID >= 0){
+			class_connected = usbclass;
 			int r = libusb_open(device_list[index], &connection_list[conID]);
-			if (r < 0) return r;
-
+			if (r < 0) 
+			{
+				fprintf(stderr, "\nconnect - open error - idx:%d  con:%d\n",index,conID);
+				return r;
+			}
 			// Detach kernel driver, if any.
 			// The result of this call is ignored
-			libusb_detach_kernel_driver(connection_list[conID], MCP2200_HID_INTERFACE);
-			libusb_detach_kernel_driver(connection_list[conID], MCP2200_CDC_INTERFACE);
-
+			if ((usbclass == MCP2200_HID_CLASS) || (usbclass == MCP2200_ALL_CLASS))
+			{
+				libusb_detach_kernel_driver(connection_list[conID], MCP2200_HID_INTERFACE);
 			// Claim HID interface
-			r = libusb_claim_interface(connection_list[conID], MCP2200_HID_INTERFACE);
-			if (r != 0){
-				closeDevice(conID);
-				return r;
+				r = libusb_claim_interface(connection_list[conID], MCP2200_HID_INTERFACE);
+				if (r != 0){
+					closeDevice(conID);
+					fprintf(stderr, "\nconnect claim hid rc:%d",r);
+					return r;
+				}
 			}
-			r = libusb_claim_interface(connection_list[conID], MCP2200_CDC_INTERFACE);
-			if (r != 0){
-				closeDevice(conID);
-				return r;
+			if ((usbclass == MCP2200_CDC_CLASS) || (usbclass == MCP2200_ALL_CLASS))
+			{
+				libusb_detach_kernel_driver(connection_list[conID], MCP2200_CDC_INTERFACE);
+			// Claim CDD interface
+				r = libusb_claim_interface(connection_list[conID], MCP2200_CDC_INTERFACE);
+				if (r != 0){
+					fprintf(stderr, "\nconnect claim cdc rc:%d",r);
+					closeDevice(conID);
+					return r;
+				}
 			}
-
 			return conID;
 		}
 	}
@@ -398,8 +431,10 @@ void mcp2200_disconnect(int connectionID){
 	if (connectionID < MCP2200_MAX_DEVICE_NUM){
 		if (connection_list[connectionID] != NULL){
 			//Release interfaces
-			libusb_release_interface(connection_list[connectionID], MCP2200_HID_INTERFACE);
-			libusb_release_interface(connection_list[connectionID], MCP2200_CDC_INTERFACE);
+			if ((class_connected == MCP2200_HID_CLASS) || (class_connected == MCP2200_ALL_CLASS))
+				libusb_release_interface(connection_list[connectionID], MCP2200_HID_INTERFACE);
+			if ((class_connected == MCP2200_CDC_CLASS) || (class_connected == MCP2200_ALL_CLASS))
+					libusb_release_interface(connection_list[connectionID], MCP2200_CDC_INTERFACE);
 			//Close device
 			closeDevice(connectionID);
 		}
