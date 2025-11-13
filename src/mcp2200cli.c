@@ -59,34 +59,35 @@ int main(int argc, char** argv){
 			printf("Configure error: %d\n", r);
 		}
 
-com_sendMsg(0,5);
-com_sendMsg(1,255);
-com_sendMsg(2,255);
 
+//com_sendMsg(0,5);
+//com_sendMsg(1,255);
+//com_sendMsg(2,255);
+		data[0] = '@';
+		data[1] = '@';
+		data[2] = 'h';
+		sendNum = 3;
 		int i;
 		int j;
 		int count;
 		uint8_t rcv_data[32];
 	
-
 		printf("Sending..\n");
 		r = mcp2200_send(connectionID, data, sendNum);
 		printf("result: %d\n", r);
 
-		for(count=0;count<20;count++){
-	
-		
 		printf("Receive..\n");
-		r = mcp2200_receive(connectionID, rcv_data, 32, &i);
-		printf("result: %d %d\n", r, i);
-		if ( r == 0){
-			for(j = 0;j<i;j++){
-				printf("%d ",rcv_data[j]);
+		for(count=0;count<4;count++){
+			r = mcp2200_receive(connectionID, rcv_data, 32, &i);
+			printf("%d %d\n", r, i);
+			if (( r == 0)&&(i>0)){
+				for(j = 0;j<i;j++){
+					printf("%c ",rcv_data[j]);
+				}
+				printf("\n");
 			}
 		}
-		printf("\n");
-		}
-
+		mcp2200_disconnect(connectionID);
 	}else{
 		printf("Multiple devices, couldn't choose..");
 	}

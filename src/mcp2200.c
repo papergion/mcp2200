@@ -37,8 +37,10 @@ static libusb_device* device_list[MCP2200_MAX_DEVICE_NUM];
 static int device_list_count = -1;
 static int class_connected = 0;
 static libusb_device_handle* connection_list[MCP2200_MAX_DEVICE_NUM];
+static int conID;
 
 static void closeDevice(int connectionID){
+ 	libusb_reset_device (connection_list[connectionID]);
 	libusb_close(connection_list[connectionID]);
 	connection_list[connectionID] = NULL;
 }
@@ -388,7 +390,7 @@ int mcp2200_connect(int index){
 
 int mcp2200_connect(int index,int usbclass){
 	if (index < device_list_count){
-		int conID = findEmptyConnectionSlot();
+		conID = findEmptyConnectionSlot();
 		if (conID >= 0){
 			class_connected = usbclass;
 			int r = libusb_open(device_list[index], &connection_list[conID]);
@@ -432,9 +434,15 @@ void mcp2200_disconnect(int connectionID){
 		if (connection_list[connectionID] != NULL){
 			//Release interfaces
 			if ((class_connected == MCP2200_HID_CLASS) || (class_connected == MCP2200_ALL_CLASS))
+			{
 				libusb_release_interface(connection_list[connectionID], MCP2200_HID_INTERFACE);
+				libusb_attach_kernel_driver(connection_list[conID], MCP2200_HID_INTERFACE);
+			}
 			if ((class_connected == MCP2200_CDC_CLASS) || (class_connected == MCP2200_ALL_CLASS))
+			{
 					libusb_release_interface(connection_list[connectionID], MCP2200_CDC_INTERFACE);
+					libusb_attach_kernel_driver(connection_list[conID], MCP2200_CDC_INTERFACE);
+			}
 			//Close device
 			closeDevice(connectionID);
 		}
