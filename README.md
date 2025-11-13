@@ -30,9 +30,13 @@ Is it ready?
 
 No, it's not. All of the device functions has been implemented, but it needs extended testing. You are 
 encuraged to try and play with it (and provide feedback) but don't expect a production-stable quality.
-The CLI demo is ready and useful for reading/setting parameters for mcp2200 inside GPIO.
+
+The CLI demo is ready and useful for reading/setting parameters for mcp2200 inside GPIO but when you 
+use it the linux device /dev/ttyACM0 disappear.
+
+The HID demo is ready and tested in linix (ubuntu) environment.
+
 In LINUX environment it is necessary to install this libraries: libusb-1.0-0-dev , libudev-dev.
-mcp2200hid Successfully tested in LINUX environment (UBUNTU).
 
 License
 =======
